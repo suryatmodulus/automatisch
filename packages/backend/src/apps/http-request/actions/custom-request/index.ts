@@ -9,6 +9,16 @@ type THeaderEntry = {
 
 type THeaderEntries = THeaderEntry[];
 
+function throwIfFileSizeExceedsLimit(contentLength: string) {
+  const maxFileSize = 25 * 1024 * 1024; // 25MB
+
+  if (Number(contentLength) > maxFileSize) {
+    throw new Error(
+      `Response is too large. Maximum size is 25MB. Actual size is ${contentLength}`
+    );
+  }
+}
+
 export default defineAction({
   name: 'Custom Request',
   key: 'customRequest',
@@ -81,17 +91,16 @@ export default defineAction({
     const data = $.step.parameters.data as string;
     const url = $.step.parameters.url as string;
     const headers = $.step.parameters.headers as THeaderEntries;
-    const maxFileSize = 25 * 1024 * 1024; // 25MB
 
     const headersObject = headers.reduce((result, entry) => ({ ...result, [entry.key]: entry.value }), {})
 
-    const metadataResponse = await $.http.head(url, { headers: headersObject });
+    // in case HEAD request is not supported by the URL
+    try {
+      const metadataResponse = await $.http.head(url, { headers: headersObject });
 
-    if (Number(metadataResponse.headers['content-length']) > maxFileSize) {
-      throw new Error(
-        `Response is too large. Maximum size is 25MB. Actual size is ${metadataResponse.headers['content-length']}`
-      );
-    }
+      throwIfFileSizeExceedsLimit(metadataResponse.headers['content-length']);
+      // eslint-disable-next-line no-empty
+    } catch { }
 
     const response = await $.http.request({
       url,
@@ -99,6 +108,8 @@ export default defineAction({
       data,
       headers: headersObject,
     });
+
+    throwIfFileSizeExceedsLimit(response.headers['content-length']);
 
     let responseData = response.data;
 
